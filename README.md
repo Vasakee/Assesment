@@ -1,3 +1,4 @@
+<!--
 # Assessment Codebase Guide
 
 This guide will help you understand the codebase architecture and set up your services, endpoints, and middleware correctly. This is NOT a solution to the assessment - it's a reference guide to help you implement your own solution following the codebase conventions.
@@ -932,3 +933,262 @@ For the assessment, you can only use basic string methods:
 **Good luck with your assessment!** 🚀
 
 Remember: This guide shows you HOW to structure your code, not WHAT logic to implement. The problem-solving is up to you!
+-->
+
+# Creator Card API Submission Guide
+
+This document describes the repository structure, the application flow, and the conventions used for implementing services, endpoints, validation, and error handling.
+
+The existing README content is preserved above as a comment block.
+
+## Project structure
+
+This repository is organized around a small application framework with three main layers:
+
+- `endpoints/` contains route handlers for incoming HTTP requests.
+- `services/` contains business logic and input validation.
+- `core/` contains shared utilities, including the server, validator, error handling, logger, and repository factory.
+
+Other important folders include:
+
+- `messages/` for reusable error and status messages.
+- `models/` for database model definitions.
+- `middlewares/` for middleware functions.
+
+## How the application works
+
+The request flow is:
+
+1. Client sends a request to the server.
+2. The server routes the request to an endpoint handler.
+3. The endpoint handler prepares a payload.
+4. The handler calls a service to perform validation and business logic.
+5. The service returns a result or throws an application error.
+6. The server formats the response and sends it back to the client.
+
+Endpoints are thin. Services contain the real application behavior.
+
+## Endpoint conventions
+
+Endpoint files are placed under `endpoints/[resource]/`.
+Each endpoint uses `createHandler` from `@app-core/server`.
+
+A minimal endpoint file looks like this:
+
+```javascript
+const { createHandler } = require('@app-core/server');
+const myService = require('@app/services/my-resource/my-service');
+
+module.exports = createHandler({
+  path: '/my-resource',
+  method: 'post',
+  middlewares: [],
+  async handler(rc, helpers) {
+    const payload = rc.body;
+    const response = await myService(payload);
+    return {
+      status: helpers.http_statuses.HTTP_200_OK,
+      data: response,
+    };
+  },
+});
+```
+
+### Handler inputs
+
+- `rc.body` contains the JSON payload for POST, PUT, or PATCH requests.
+- `rc.query` contains query parameters.
+- `rc.params` contains path parameters.
+- `rc.headers` contains request headers.
+- `rc.meta` contains data added by middleware.
+
+### Response format
+
+Endpoints should return an object with `status` and `data`.
+The server adds `status: 'success'` or `status: 'error'` automatically.
+
+## Service conventions
+
+Services are located in `services/[resource]/[service].js`.
+Each service should:
+
+- accept exactly two arguments: `serviceData` and `options = {}`.
+- validate all input using `validator.validate(...)` before any business logic.
+- use a parsed validation spec declared outside the function.
+- keep business rules inside the service.
+- throw errors using `throwAppError`.
+- return a single response object.
+
+A minimal service looks like this:
+
+```javascript
+const validator = require('@app-core/validator');
+const { throwAppError, ERROR_CODE } = require('@app-core/errors');
+const Messages = require('@app/messages/my-resource');
+
+const spec = `root {
+  name string
+  amount number<min:1>
+}`;
+
+const parsedSpec = validator.parse(spec);
+
+async function createMyResource(serviceData, options = {}) {
+  let response;
+  const data = validator.validate(serviceData, parsedSpec);
+
+  if (!data.name) {
+    throwAppError(Messages.MISSING_NAME, ERROR_CODE.INVLDDATA);
+  }
+
+  response = {
+    id: 'generated-id',
+    ...data,
+  };
+
+  return response;
+}
+
+module.exports = createMyResource;
+```
+
+## Validation rules
+
+Validation uses the custom VSL syntax provided by `@app-core/validator`.
+
+### Basic syntax
+
+- `field string` means required string.
+- `field? string` means optional string.
+- `field[] string` means required array of strings.
+- `field[]? string` means optional array of strings.
+- `field { ... }` defines a nested object.
+
+### Field modifiers and constraints
+
+- `string<trim>` removes leading and trailing whitespace.
+- `string<lowercase>` converts text to lowercase.
+- `string<uppercase>` converts text to uppercase.
+- `string<minLength:1>` requires minimum length.
+- `number<min:0>` requires a minimum numeric value.
+- `string(option1|option2)` defines an enum.
+
+### Important details
+
+- Always parse the spec once outside the service function.
+- Always validate input before performing business logic.
+- Do not place business logic inside the validation spec.
+
+## Error handling
+
+Errors must come through the core error system.
+
+Use `throwAppError(message, ERROR_CODE.SOME_CODE)`.
+
+The available error codes are exported from `@app-core/errors` and include:
+
+- `ERROR_CODE.AUTHERR`
+- `ERROR_CODE.NOAUTHERR`
+- `ERROR_CODE.INVLDAUTHTOKEN`
+- `ERROR_CODE.INVLDREQ`
+- `ERROR_CODE.INVLDDATA`
+- `ERROR_CODE.VALIDATIONERR`
+- `ERROR_CODE.NOTFOUND`
+- `ERROR_CODE.DUPLRCRD`
+- `ERROR_CODE.APPERR`
+- `ERROR_CODE.HTTPREQERR`
+
+The server maps these codes to HTTP status codes automatically.
+
+### Message files
+
+Reusable messages should be defined under `messages/`.
+Each message file exports a plain object.
+
+Example:
+
+```javascript
+const MyResourceMessages = {
+  MISSING_NAME: 'Name is required.',
+  INVALID_AMOUNT: 'Amount must be greater than zero.',
+};
+
+module.exports = MyResourceMessages;
+```
+
+Register message files in `messages/index.js`.
+
+## Creator card specific details
+
+The creator card feature uses these conventions:
+
+- `services/creator-card/create-creator-card.js` handles creation and validation.
+- `services/creator-card/get-creator-card.js` handles retrieval by slug.
+- `services/creator-card/delete-creator-card.js` handles deletion.
+- `endpoints/creator-card/` contains HTTP route handlers.
+- `messages/creator-card.js` contains error and status messages for creator cards.
+
+### Slug generation
+
+Slug generation must use basic string methods only.
+Regular expressions are not allowed in the implementation.
+
+Allowed string operations include:
+
+- `split(' ')`
+- `indexOf('keyword')`
+- `substring(start, end)`
+- `slice(start, end)`
+- `trim()`
+- `toLowerCase()`
+- `toUpperCase()`
+n- `replace('old', 'new')`
+- `startsWith('prefix')`
+- `endsWith('suffix')`
+- `includes('substring')`
+
+Do not use regex-based methods such as `.match(/pattern/)`, `.split(/pattern/)`, `.replace(/pattern/, 'replacement')`, or `.test()`.
+
+## Running the application
+
+From the repository root, use the provided npm scripts.
+
+To start the server in development mode:
+
+```bash
+npm run dev
+```
+
+To run existing tests:
+
+```bash
+npm test
+```
+
+If the repository has no test script yet, run the service manually and verify endpoints with a HTTP client.
+
+## How to add a new feature
+
+1. Add a service in `services/[feature]/[action].js`.
+2. Add an endpoint in `endpoints/[feature]/[action].js`.
+3. Add any messages to `messages/[feature].js` and register them in `messages/index.js`.
+4. Add validation specs in the service.
+5. Use `throwAppError` for error conditions.
+6. Use `appLogger` instead of `console.log`.
+7. Keep each module focused on a single responsibility.
+
+## Conventions to follow
+
+- Use alias imports like `@app-core/validator` and `@app/services/...`.
+- Do not use `console.log` in production code.
+- Keep endpoint handlers simple.
+- Keep validation logic in services.
+- Keep repository access inside services or repository factories.
+- Throw defined application errors instead of generic errors.
+
+## Notes on this repository
+
+This repository is designed to be extended and tested in a controlled environment.
+The code is intended to be readable and easy to follow.
+
+If you implement a new endpoint, make sure it follows the same pattern as existing creator card endpoints.
